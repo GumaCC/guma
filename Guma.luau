@@ -4,6 +4,12 @@ local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local oldGui = playerGui:FindFirstChild("GumaPanel")
+if oldGui then
+	oldGui:Destroy()
+end
 
 local RANGE = 3500
 local DEPTH = workspace.FallenPartsDestroyHeight + 50
@@ -13,7 +19,7 @@ local home = nil
 local uiVisible = true
 local locked = false
 
-local PURPLE = Color3.fromRGB(120, 80, 255)
+local RED = Color3.fromRGB(255, 40, 40)
 local DARK = Color3.fromRGB(10, 10, 10)
 local WHITE = Color3.new(1, 1, 1)
 
@@ -22,7 +28,7 @@ local gradients = {}
 local gui = Instance.new("ScreenGui")
 gui.Name = "GumaPanel"
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.Parent = playerGui
 
 local function style(obj, radius)
 	local c = Instance.new("UICorner")
@@ -37,11 +43,11 @@ local function style(obj, radius)
 
 	local g = Instance.new("UIGradient")
 	g.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, PURPLE),
-		ColorSequenceKeypoint.new(0.3, PURPLE),
+		ColorSequenceKeypoint.new(0, RED),
+		ColorSequenceKeypoint.new(0.3, RED),
 		ColorSequenceKeypoint.new(0.5, WHITE),
-		ColorSequenceKeypoint.new(0.7, PURPLE),
-		ColorSequenceKeypoint.new(1, PURPLE),
+		ColorSequenceKeypoint.new(0.7, RED),
+		ColorSequenceKeypoint.new(1, RED),
 	})
 	g.Parent = s
 	table.insert(gradients, g)
@@ -102,7 +108,7 @@ bannerLayout.Parent = banner
 
 local dot = Instance.new("Frame")
 dot.Size = UDim2.fromOffset(28, 28)
-dot.BackgroundColor3 = Color3.fromRGB(150, 110, 255)
+dot.BackgroundColor3 = WHITE
 dot.BorderSizePixel = 0
 dot.LayoutOrder = 1
 dot.Parent = banner
@@ -110,6 +116,15 @@ dot.Parent = banner
 local dotCorner = Instance.new("UICorner")
 dotCorner.CornerRadius = UDim.new(1, 0)
 dotCorner.Parent = dot
+
+local dotGradient = Instance.new("UIGradient")
+dotGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, RED),
+	ColorSequenceKeypoint.new(0.5, WHITE),
+	ColorSequenceKeypoint.new(1, RED),
+})
+dotGradient.Parent = dot
+table.insert(gradients, dotGradient)
 
 local bannerText = Instance.new("TextLabel")
 bannerText.Size = UDim2.fromOffset(0, 36)
