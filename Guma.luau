@@ -13,8 +13,18 @@ end
 
 local RANGE = 3500
 local DEPTH = workspace.FallenPartsDestroyHeight + 50
-local active = true
+local active = false
 local home = nil
+
+local spinOn = false
+local spinAngle = 0
+local SPIN_STEP = math.rad(150)
+
+local syncPause = 0.5
+local syncOn = false
+local syncing = false
+local syncToken = 0
+local stayTime = 0.5
 
 local uiVisible = true
 local locked = false
@@ -22,6 +32,9 @@ local locked = false
 local RED = Color3.fromRGB(255, 40, 40)
 local DARK = Color3.fromRGB(10, 10, 10)
 local WHITE = Color3.new(1, 1, 1)
+
+local BUTTON_W = 100
+local BUTTON_H = 32
 
 local gradients = {}
 
@@ -180,7 +193,7 @@ speedLabel.Parent = speedPanel
 
 local function makeButton(text, y)
 	local button = Instance.new("TextButton")
-	button.Size = UDim2.fromOffset(100, 32)
+	button.Size = UDim2.fromOffset(BUTTON_W, BUTTON_H)
 	button.Position = UDim2.fromOffset(10, y)
 	button.BackgroundColor3 = DARK
 	button.BorderSizePixel = 0
@@ -194,9 +207,55 @@ local function makeButton(text, y)
 	return button
 end
 
+local function makeBox(y, value, placeholder)
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.fromOffset(BUTTON_W, BUTTON_H)
+	box.Position = UDim2.fromOffset(10, y)
+	box.BackgroundColor3 = DARK
+	box.BorderSizePixel = 0
+	box.Text = tostring(value)
+	box.PlaceholderText = placeholder
+	box.Font = Enum.Font.GothamBold
+	box.TextSize = 14
+	box.TextColor3 = WHITE
+	box.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+	box.ClearTextOnFocus = false
+	box.Visible = false
+	box.Parent = gui
+	style(box, UDim.new(0, 10))
+	return box
+end
+
 local toggle = makeButton("Toggle UI", 10)
 local lock = makeButton("Lock UI", 50)
-local loopButton = makeButton("Loop TP: ON", 90)
+local loopButton = makeButton("Voidspam: OFF", 90)
+local spinButton = makeButton("Spin: OFF", 130)
+local syncButton = makeButton("Sync: OFF", 170)
+
+local syncBox = makeBox(210, stayTime, "sec")
+local pauseBox = makeBox(250, syncPause, "sec")
+
+local function refreshSyncBox()
+	local show = uiVisible and syncOn
+	syncBox.Visible = show
+	pauseBox.Visible = show
+end
+
+syncBox.FocusLost:Connect(function()
+	local n = tonumber(syncBox.Text)
+	if n and n >= 0.1 then
+		stayTime = n
+	end
+	syncBox.Text = tostring(stayTime)
+end)
+
+pauseBox.FocusLost:Connect(function()
+	local n = tonumber(pauseBox.Text)
+	if n and n >= 0.1 then
+		syncPause = n
+	end
+	pauseBox.Text = tostring(syncPause)
+end)
 
 toggle.Activated:Connect(function()
 	uiVisible = not uiVisible
@@ -204,11 +263,27 @@ toggle.Activated:Connect(function()
 	panel.Visible = uiVisible
 	speedPanel.Visible = uiVisible
 	loopButton.Visible = uiVisible
+	spinButton.Visible = uiVisible
+	syncButton.Visible = uiVisible
+	refreshSyncBox()
 end)
 
 lock.Activated:Connect(function()
 	locked = not locked
 	lock.Text = locked and "Unlock UI" or "Lock UI"
+end)
+
+spinButton.Activated:Connect(function()
+	spinOn = not spinOn
+	spinButton.Text = spinOn and "Spin: ON" or "Spin: OFF"
+
+	if not spinOn then
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root then
+			root.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
 end)
 
 makeDraggable(banner, banner)
@@ -231,8 +306,10 @@ local lastPos = nil
 local spin = 0
 
 loopButton.Activated:Connect(function()
+	if syncing then return end
+
 	active = not active
-	loopButton.Text = active and "Loop TP: ON" or "Loop TP: OFF"
+	loopButton.Text = active and "Voidspam: ON" or "Voidspam: OFF"
 
 	if not active then
 		local character = player.Character
@@ -244,6 +321,50 @@ loopButton.Activated:Connect(function()
 		end
 		home = nil
 		lastPos = nil
+	end
+end)
+
+local function runSyncLoop(token)
+	while syncOn and syncToken == token do
+		local elapsed = 0
+		while elapsed < stayTime do
+			local dt = task.wait()
+			if not (syncOn and syncToken == token) then
+				return
+			end
+			if active then
+				elapsed += dt
+			end
+		end
+
+		syncing = true
+		active = false
+
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and home then
+			root.CFrame = home
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+		end
+		home = nil
+		lastPos = nil
+
+		task.wait(syncPause)
+
+		active = true
+		syncing = false
+	end
+end
+
+syncButton.Activated:Connect(function()
+	syncOn = not syncOn
+	syncButton.Text = syncOn and "Sync: ON" or "Sync: OFF"
+	refreshSyncBox()
+
+	syncToken += 1
+	if syncOn then
+		task.spawn(runSyncLoop, syncToken)
 	end
 end)
 
@@ -285,21 +406,34 @@ player.CharacterAdded:Connect(function()
 end)
 
 RunService.Heartbeat:Connect(function()
-	if not active then return end
-
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	if not home then
-		home = root.CFrame
+	if spinOn then
+		spinAngle = (spinAngle + SPIN_STEP) % (math.pi * 2)
 	end
 
-	root.CFrame = CFrame.new(
-		math.random(-RANGE, RANGE),
-		DEPTH - math.random(0, 20),
-		math.random(-RANGE, RANGE)
-	)
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.AssemblyAngularVelocity = Vector3.zero
+	if active then
+		if not home then
+			home = root.CFrame
+		end
+
+		local target = CFrame.new(
+			math.random(-RANGE, RANGE),
+			DEPTH - math.random(0, 20),
+			math.random(-RANGE, RANGE)
+		)
+
+		if spinOn then
+			target = target * CFrame.Angles(0, spinAngle, 0)
+		end
+
+		root.CFrame = target
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+	elseif spinOn then
+		root.CFrame = root.CFrame * CFrame.Angles(0, SPIN_STEP, 0)
+		root.AssemblyAngularVelocity = Vector3.new(0, 10000, 0)
+	end
 end)
